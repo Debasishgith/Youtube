@@ -33,7 +33,7 @@ app.use(
 
 app.use(express.json({ limit: "30mb", extended: true }));
 app.use(express.urlencoded({ limit: "30mb", extended: true }));
-// Serve uploaded files with proper CORS headers for video streaming
+
 app.use(
   "/uploads",
   (req, res, next) => {
