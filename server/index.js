@@ -14,10 +14,7 @@ import path from "path";
 dotenv.config();
 const app = express();
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://youtube-chi-five-44.vercel.app",
-];
+const allowedOrigins = ["https://youtube-chi-five-44.vercel.app"];
 
 app.use(
   cors({
@@ -28,7 +25,6 @@ app.use(
         callback(new Error("Not allowed by CORS"));
       }
     },
-    credentials: true, // remove this if you're not using cookies/sessions
   }),
 );
 
