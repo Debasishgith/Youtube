@@ -28,7 +28,7 @@ export default function BillingHistory({
         </p>
       ) : transactions.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-190px text-left text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
                 <th className="p-4 font-medium">Date / invoice</th>
@@ -54,7 +54,9 @@ export default function BillingHistory({
                   <td className="p-4">
                     {formatPrice(transaction.amount, transaction.currency)}
                   </td>
-                  <td className="p-4 capitalize">{transaction.paymentStatus}</td>
+                  <td className="p-4 capitalize">
+                    {transaction.paymentStatus}
+                  </td>
                   <td className="p-4">
                     <div>{transaction.paymentId || "—"}</div>
                     <div className="text-xs text-gray-500">
@@ -69,7 +71,9 @@ export default function BillingHistory({
         </div>
       ) : (
         <p className="p-5 text-sm text-gray-600">
-          {loading ? "Loading billing history…" : "No billing transactions yet."}
+          {loading
+            ? "Loading billing history…"
+            : "No billing transactions yet."}
         </p>
       )}
     </section>
