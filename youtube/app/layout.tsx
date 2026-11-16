@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "@/components/ui/Header";
 import Sidebar from "@/components/ui/Sidebar";
 import { UserProvider } from "@/lib/authContext";
+import { SocketProvider } from "@/lib/socket";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,13 +28,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <UserProvider>
-        <body className="min-h-screen bg-white text-black">
-          <Header />
-          <div className="flex">
-            <Sidebar />
-            {children}
-          </div>
-        </body>
+        <SocketProvider>
+          <body className="min-h-screen bg-background text-foreground">
+            <Header />
+            <div className="flex">
+              <Sidebar />
+              {children}
+            </div>
+          </body>
+        </SocketProvider>
       </UserProvider>
     </html>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Clock, MoreVertical, Play, X } from "lucide-react";
 import Link from "next/link";
 import {
@@ -14,35 +14,47 @@ import { useUser } from "@/lib/authContext";
 import { Button } from "./button";
 import { formatDistanceToNow } from "date-fns";
 
+type LikedVideo = {
+  _id: string;
+  createdAt: string;
+  videoid: {
+    _id: string;
+    filepath: string;
+    videotitle: string;
+    videochanel: string;
+    views: number;
+  };
+};
+
 export default function WatchLaterContent() {
-  const [likedVideos, setLikedVideos] = useState<any[]>([]);
+  const [likedVideos, setLikedVideos] = useState<LikedVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useUser();
 
-  useEffect(() => {
-    if (user) {
-      loadLikedVideos();
-    }
-  }, [user]);
-
-  const loadLikedVideos = async () => {
+  const loadLikedVideos = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
     try {
-      const likedData = await axiosInstance.get(`/like/${user?._id}`);
-
+      const likedData = await axiosInstance.get<LikedVideo[]>(`/like/${user._id}`);
       setLikedVideos(likedData.data);
     } catch (error) {
       console.error("Error loading history:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setTimeout(() => void loadLikedVideos(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadLikedVideos, user]);
 
   const handleUnlikeVideo = async (videoId: string, likedVideoId: string) => {
+    if (!user) return;
     try {
-      console.log("Unliking video:", videoId, "for user:", user.id);
+      console.log("Unliking video:", videoId, "for user:", user._id);
       setLikedVideos(likedVideos.filter((item) => item._id !== likedVideoId));
     } catch (error) {
       console.error("Error unliking video:", error);
@@ -61,7 +73,7 @@ export default function WatchLaterContent() {
           Keep track of what to watch
         </h2>
         <p className="text-gray-600">
-          Watch history isn't viewable when signed out.
+          Watch history isn&apos;t viewable when signed out.
         </p>
       </div>
     );

@@ -128,3 +128,30 @@
     @apply font-sans;
   }
 }
+
+.dark .bg-white {
+  background-color: var(--card);
+}
+
+.dark .bg-gray-50 {
+  background-color: var(--muted);
+}
+
+.dark .bg-gray-100 {
+  background-color: var(--secondary);
+}
+
+.dark .text-black {
+  color: var(--foreground);
+}
+
+.dark .text-gray-500,
+.dark .text-gray-600,
+.dark .text-gray-700 {
+  color: var(--muted-foreground);
+}
+
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: var(--border);
+}

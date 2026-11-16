@@ -14,11 +14,18 @@ import axiosInstance from "@/lib/axiosInstance";
 import { useUser } from "@/lib/authContext";
 import { useRouter } from "next/navigation";
 
-const ChannelDialogue = ({ isOpen, onClose, mode }: any) => {
+type ChannelDialogueProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  mode: "create" | "edit";
+};
+
+const ChannelDialogue = ({ isOpen, onClose, mode }: ChannelDialogueProps) => {
   const { user, logIn } = useUser();
 
   const [formData, setFormData] = useState({ name: "", description: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState("");
   const router = useRouter();
 
   const handleChange = (
@@ -30,18 +37,30 @@ const ChannelDialogue = ({ isOpen, onClose, mode }: any) => {
 
   const handlesubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!user) return;
+    setIsSubmitting(true);
+    setSubmissionError("");
     const payload = {
       channelName: formData.name,
       description: formData.description,
     };
-    const response = await axiosInstance.patch(
-      `/user/update/${user._id}`,
-      payload,
-    );
-    logIn(response.data);
-    router.push(`/channel/${response.data._id}`);
-    onClose();
-    setFormData({ name: "", description: "" });
+    try {
+      const response = await axiosInstance.patch(
+        `/user/update/${user._id}`,
+        payload,
+      );
+      logIn(response.data);
+      router.push(`/channel/${response.data._id}`);
+      onClose();
+      setFormData({ name: "", description: "" });
+    } catch (error) {
+      console.error("Unable to save channel profile:", error);
+      setSubmissionError(
+        error instanceof Error ? error.message : "The channel could not be saved.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -54,6 +73,11 @@ const ChannelDialogue = ({ isOpen, onClose, mode }: any) => {
         </DialogHeader>
 
         <form onSubmit={handlesubmit} className="space-y-6">
+          {submissionError && (
+            <p role="alert" className="text-sm text-destructive">
+              {submissionError}
+            </p>
+          )}
           {/* Channel Name */}
           <div className="space-y-2">
             <Label htmlFor="name">Channel Name</Label>

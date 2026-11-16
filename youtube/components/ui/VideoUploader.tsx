@@ -6,8 +6,10 @@ import { Label } from "./label";
 import { Input } from "./input";
 import { Progress } from "./progress";
 import axiosInstance from "@/lib/axiosInstance";
+import { auth } from "@/lib/firebase";
+import type { AxiosProgressEvent } from "axios";
 
-const VideoUploader = ({ channelId, channelName }: any) => {
+const VideoUploader = ({ channelId }: { channelId: string }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -70,23 +72,26 @@ const VideoUploader = ({ channelId, channelName }: any) => {
     const formdata = new FormData();
     formdata.append("file", videoFile);
     formdata.append("videotitle", videoTitle);
-    formdata.append("videochanel", channelName);
-    formdata.append("uploader", channelId);
-    console.log(formdata);
     try {
       setIsUploading(true);
       setUploadProgress(0);
-      const result = await axiosInstance.post("/video/upload", formdata, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-        onUploadProgress: (ProgressEvent: any) => {
-          const progress = Math.round(
-            (ProgressEvent.loaded * 100) / ProgressEvent.total,
-          );
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) {
+        throw new Error("Sign in as the channel owner to upload videos.");
+      }
+      const token = await firebaseUser.getIdToken();
+      await axiosInstance.post(
+        `/video/channel/${channelId}/upload`,
+        formdata,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        onUploadProgress: (event: AxiosProgressEvent) => {
+          if (!event.total) return;
+          const progress = Math.round((event.loaded * 100) / event.total);
           setUploadProgress(progress);
         },
-      });
+        },
+      );
 
       toast.add({
         type: "success",

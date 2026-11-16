@@ -1,12 +1,24 @@
 "use client";
 
-import { Bell, Menu, Mic, Search, User, VideoIcon } from "lucide-react";
+import {
+  Bell,
+  Menu,
+  Mic,
+  Moon,
+  Search,
+  Shield,
+  Sun,
+  User,
+  VideoIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
@@ -15,9 +27,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import ChannelDialogue from "./ChannelDialogue";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/lib/authContext";
+import LoginVerificationDialog from "./LoginVerificationDialog";
 
 const Header = () => {
-  const { user, logOut, handleGoogleSignIn } = useUser();
+  const {
+    user,
+    logOut,
+    handleGoogleSignIn,
+    authPending,
+    authError,
+    loginChallenge,
+    changeThemePreference,
+  } = useUser();
 
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isDialogueOpen, setIsDialogueOpen] = useState(false);
@@ -29,12 +50,6 @@ const Header = () => {
       router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
-  const handleKeypress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSearch(e as any);
-    }
-  };
-
   return (
     <header className="flex items-center gap-4 py-3 px-5 border-b">
       <Button variant="ghost" size="icon">
@@ -65,7 +80,6 @@ const Header = () => {
       >
         <div className="flex items-center border rounded-md shadow-2xs ">
           <input
-            onKeyPress={handleKeypress}
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -87,29 +101,35 @@ const Header = () => {
       </form>
       {user ? (
         <>
-          <Button variant="ghost" size="icon">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push("/video-call")}
+          >
             <VideoIcon className="text-gray-600" />
           </Button>
+
           <Button variant="ghost" size="icon">
             <Bell className="text-gray-600" />
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" className="rounded-full h-8 w-8">
-                  <Avatar>
-                    <AvatarImage src={user.image} />
-                    <AvatarFallback>
-                      {user.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
-              }
-            />
+              aria-label="Open profile menu"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-transparent bg-transparent p-0 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <Avatar>
+                <AvatarImage src={user.image} />
+                <AvatarFallback>
+                  {user.name.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56 " align="end">
               {user?.channelName ? (
-                <DropdownMenuItem>
-                  <Link href={`/channel/${user._id}`}>Your Channel</Link>
+                <DropdownMenuItem
+                  render={<Link href={`/channel/${user._id}`} />}
+                >
+                  Your Channel
                 </DropdownMenuItem>
               ) : (
                 <div>
@@ -129,9 +149,46 @@ const Header = () => {
               <DropdownMenuItem>
                 <Link href="/liked">Liked videos</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link href="/watchLater">Watch Later</Link>
+              <DropdownMenuItem render={<Link href="/watch-later" />}>
+                Watch Later
               </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link href="/downloads">Downloads</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link href="/subscription">Subscriptions</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem render={<Link href="/account/security" />}>
+                <Shield />
+                Account security
+              </DropdownMenuItem>
+
+              {user.role === "admin" && (
+                <DropdownMenuItem>
+                  <Link href="/admin/comments">Comment moderation</Link>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Theme</DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={() => void changeThemePreference("auto")}
+                >
+                  Auto (IST)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => void changeThemePreference("light")}
+                >
+                  <Sun />
+                  Light
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => void changeThemePreference("dark")}
+                >
+                  <Moon />
+                  Dark
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={logOut}>Sign Out</DropdownMenuItem>
             </DropdownMenuContent>
@@ -139,17 +196,30 @@ const Header = () => {
         </>
       ) : (
         <>
-          <Button onClick={handleGoogleSignIn}>
+          <Button
+            onClick={handleGoogleSignIn}
+            disabled={authPending || Boolean(loginChallenge)}
+          >
             <User />
-            Sign In
+            {authPending
+              ? "Signing in..."
+              : loginChallenge
+                ? "Verify email"
+                : "Sign In"}
           </Button>
         </>
+      )}
+      {authError && (
+        <p role="alert" className="max-w-56 text-xs text-destructive">
+          {authError}
+        </p>
       )}
       <ChannelDialogue
         isOpen={isDialogueOpen}
         onClose={() => setIsDialogueOpen(false)}
         mode="create"
       />
+      <LoginVerificationDialog />
     </header>
   );
 };

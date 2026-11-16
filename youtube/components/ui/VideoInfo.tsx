@@ -1,5 +1,6 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Clock,
   Download,
@@ -8,27 +9,118 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import axios from "axios";
 import { useUser } from "@/lib/authContext";
 import axiosInstance from "@/lib/axiosInstance";
+import { auth } from "@/lib/firebase";
 import { Avatar, AvatarFallback } from "./avatar";
 import { Button } from "./button";
 
-const VideoInfo = ({ video }: any) => {
-  const [likes, setlikes] = useState(video.like || 0);
+interface VideoInfoData {
+  _id: string;
+  videotitle: string;
+  videochanel: string;
+  views: number;
+  createdAt: string;
+  filename?: string;
+  minimumSubscriptionPlan?: string;
+  Like?: number;
+  Dislike?: number;
+}
+
+interface DownloadEligibility {
+  plan: string;
+  limit: number;
+  used: number;
+  remaining: number;
+  resetsAt: string;
+  subscriptionActive: boolean;
+  subscriptionMessage?: string;
+  requiredPlan: string;
+  videoAllowed: boolean;
+  videoAvailable: boolean;
+  deviceAllowed: boolean;
+  duplicateDownload: boolean;
+  canDownload: boolean;
+}
+
+const getDeviceId = () => {
+  const deviceStorageKey = "youtube-device-id";
+  let deviceId = window.localStorage.getItem(deviceStorageKey);
+  if (!deviceId) {
+    deviceId = window.crypto.randomUUID();
+    window.localStorage.setItem(deviceStorageKey, deviceId);
+  }
+  return deviceId;
+};
+
+const formatQuotaReset = (date: string) =>
+  new Date(date).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+
+const VideoInfo = ({ video }: { video: VideoInfoData }) => {
+  const [likes, setlikes] = useState(video.Like || 0);
   const [dislikes, setDislikes] = useState(video.Dislike || 0);
   const [isLiked, setIsLiked] = useState(false);
   const [isDisliked, setIsDisliked] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const { user } = useUser();
   const [isWatchLater, setIsWatchLater] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadQuota, setDownloadQuota] =
+    useState<DownloadEligibility | null>(null);
+  const [isCheckingQuota, setIsCheckingQuota] = useState(false);
+  const [quotaCheckError, setQuotaCheckError] = useState("");
+  const downloadInFlight = useRef(false);
+
+  const loadDownloadQuota = useCallback(async () => {
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) {
+      setDownloadQuota(null);
+      return null;
+    }
+
+    setIsCheckingQuota(true);
+    setQuotaCheckError("");
+    try {
+      const token = await firebaseUser.getIdToken();
+      const response = await axiosInstance.get<DownloadEligibility>(
+        `/download/quota/${video._id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Device-Id": getDeviceId(),
+          },
+        },
+      );
+      setDownloadQuota(response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Unable to check download eligibility:", error);
+      setDownloadQuota(null);
+      setQuotaCheckError(
+        "Could not check your download quota. The server will still verify access when you download.",
+      );
+      return null;
+    } finally {
+      setIsCheckingQuota(false);
+    }
+  }, [video._id]);
 
   useEffect(() => {
-    setlikes(video.Like || 0);
-    setDislikes(video.Dislike || 0);
-    setIsLiked(false);
-    setIsDisliked(false);
-  }, [video]);
+    const timer = window.setTimeout(() => {
+      void loadDownloadQuota();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadDownloadQuota, user]);
 
   useEffect(() => {
     const handleviews = async () => {
@@ -45,7 +137,7 @@ const VideoInfo = ({ video }: any) => {
       }
     };
     handleviews();
-  }, [user]);
+  }, [user, video._id]);
 
   const handleLike = async () => {
     if (!user) return;
@@ -55,13 +147,13 @@ const VideoInfo = ({ video }: any) => {
       });
       if (res.data.liked) {
         if (isLiked) {
-          setlikes((prev: any) => prev - 1);
+          setlikes((prev) => prev - 1);
           setIsLiked(false);
         } else {
-          setlikes((prev: any) => prev + 1);
+          setlikes((prev) => prev + 1);
           setIsLiked(true);
           if (isDisliked) {
-            setDislikes((prev: any) => prev - 1);
+            setDislikes((prev) => prev - 1);
             setIsDisliked(false);
           }
         }
@@ -94,13 +186,13 @@ const VideoInfo = ({ video }: any) => {
       });
       if (!res.data.liked) {
         if (isDisliked) {
-          setDislikes((prev: any) => prev - 1);
+          setDislikes((prev) => prev - 1);
           setIsDisliked(false);
         } else {
-          setDislikes((prev: any) => prev + 1);
+          setDislikes((prev) => prev + 1);
           setIsDisliked(true);
           if (isLiked) {
-            setlikes((prev: any) => prev - 1);
+            setlikes((prev) => prev - 1);
             setIsLiked(false);
           }
         }
@@ -109,6 +201,103 @@ const VideoInfo = ({ video }: any) => {
       console.log(error);
     }
   };
+
+  const handleDownload = async () => {
+    if (downloadInFlight.current) return;
+
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) {
+      setDownloadError("Sign in to download this video.");
+      return;
+    }
+
+    downloadInFlight.current = true;
+    setIsDownloading(true);
+    setDownloadError("");
+
+    try {
+      const currentEligibility = await loadDownloadQuota();
+      if (!currentEligibility) {
+        setDownloadError(
+          "Could not verify your download access. Please try again.",
+        );
+        return;
+      }
+      if (!currentEligibility.canDownload) return;
+
+      const token = await firebaseUser.getIdToken();
+      const response = await axiosInstance.get<Blob>(
+        `/download/${video._id}/download`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Device-Id": getDeviceId(),
+          },
+          responseType: "blob",
+        },
+      );
+
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = video.filename || `${video.videotitle}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error: unknown) {
+      let message = "Unable to download this video.";
+      const responseData = axios.isAxiosError(error)
+        ? error.response?.data
+        : undefined;
+
+      if (responseData instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await responseData.text()) as {
+            message?: string;
+            stage?: string;
+          };
+          message = [
+            parsed.message || message,
+            parsed.stage ? `Failed during: ${parsed.stage}.` : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+        } catch {
+          message = "Unable to download this video.";
+        }
+      } else if (
+        typeof responseData === "object" &&
+        responseData !== null &&
+        "message" in responseData &&
+        typeof responseData.message === "string"
+      ) {
+        message = responseData.message;
+      }
+
+      setDownloadError(message);
+    } finally {
+      downloadInFlight.current = false;
+      setIsDownloading(false);
+      await loadDownloadQuota();
+    }
+  };
+
+  const downloadUnavailableMessage = !downloadQuota
+    ? ""
+    : !downloadQuota.subscriptionActive
+      ? downloadQuota.subscriptionMessage ||
+        "Your subscription is not active. Renew to download."
+      : !downloadQuota.videoAllowed
+        ? `This video requires the ${downloadQuota.requiredPlan} plan or higher.`
+        : !downloadQuota.videoAvailable
+          ? "The video file is currently unavailable."
+          : !downloadQuota.deviceAllowed
+            ? "This device is not authorized to download from your account."
+            : downloadQuota.remaining === 0 && !downloadQuota.duplicateDownload
+              ? `You've used today's ${downloadQuota.plan} download quota. It resets at ${formatQuotaReset(downloadQuota.resetsAt)}.`
+              : "";
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">{video.videotitle}</h1>
@@ -177,9 +366,26 @@ const VideoInfo = ({ video }: any) => {
             variant="ghost"
             size="sm"
             className="bg-gray-100 rounded-full"
+            onClick={handleDownload}
+            disabled={
+              isDownloading ||
+              isCheckingQuota ||
+              (Boolean(downloadQuota) && !downloadQuota?.canDownload)
+            }
           >
             <Download className="w-5 h-5 mr-2" />
-            Download
+            {isDownloading
+              ? "Preparing..."
+              : isCheckingQuota
+                ? "Checking..."
+                : !user
+                  ? "Sign in to download"
+                  : downloadQuota?.duplicateDownload &&
+                      downloadQuota.remaining === 0
+                    ? "Download again"
+                    : downloadQuota?.remaining !== undefined
+                      ? `Download (${downloadQuota.remaining} left)`
+                      : "Download"}
           </Button>
           <Button
             variant="ghost"
@@ -190,16 +396,39 @@ const VideoInfo = ({ video }: any) => {
           </Button>
         </div>
       </div>
+      {downloadQuota && (
+        <p className="text-sm text-gray-600" aria-live="polite">
+          {downloadQuota.plan} plan: {downloadQuota.remaining} of{" "}
+          {downloadQuota.limit} downloads remaining today.
+        </p>
+      )}
+      {downloadUnavailableMessage && (
+        <p className="text-sm text-amber-700" role="status">
+          {downloadUnavailableMessage}{" "}
+          {downloadUnavailableMessage.includes("quota") && (
+            <Link className="underline" href="/subscription">
+              View plans
+            </Link>
+          )}
+        </p>
+      )}
+      {quotaCheckError && (
+        <p className="text-sm text-gray-600" role="status">
+          {quotaCheckError}
+        </p>
+      )}
+      {downloadError && (
+        <p className="text-sm text-red-600" role="alert">
+          {downloadError}
+        </p>
+      )}
       <div className="bg-gray-100 rounded-lg p-4">
         <div className="flex gap-4 text-sm font-medium mb-2">
           <span>{video.views} views</span>
           <span>{video.createdAt} ago</span>
         </div>
         <div className={`text-sm ${showFullDescription ? "" : "line-clamp-3"}`}>
-          <p>
-            Sample video description. This would contain the actual video
-            description from the database.
-          </p>
+          <p>Video description.</p>
         </div>
         <Button
           variant="ghost"
