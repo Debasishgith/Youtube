@@ -8,10 +8,19 @@ import likeRoutes from "./routes/like.js";
 import historyRoutes from "./routes/history.js";
 import commentroutes from "./routes/comment.js";
 import watchLaterRoutes from "./routes/watchLater.js";
-
+import downloadRoutes from "./routes/download.js";
+import subscriptionRoutes from "./routes/subscription.js";
+import meetingRoutes from "./routes/meeting.js";
+import { createServer } from "http";
+import { Server } from "socket.io";
 import path from "path";
+import { fileURLToPath } from "url";
+import { configureMeetingSockets } from "./services/meetingSocket.js";
 
-dotenv.config();
+dotenv.config({
+  path: path.join(path.dirname(fileURLToPath(import.meta.url)), ".env"),
+});
+
 const app = express();
 
 const allowedOrigins = [
@@ -19,8 +28,16 @@ const allowedOrigins = [
   "http://localhost:3000",
 ];
 
+const server = createServer(app);
+const io = new Server(server, {
+  cors: { origin: allowedOrigins },
+  maxHttpBufferSize: 3_000_000,
+});
+configureMeetingSockets(io);
+
 app.use(
   cors({
+    credentials: true,
     origin: function (origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -30,6 +47,14 @@ app.use(
     },
   }),
 );
+
+if (process.env.TRUST_PROXY) {
+  const trustProxy = process.env.TRUST_PROXY;
+  app.set(
+    "trust proxy",
+    /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy,
+  );
+}
 
 app.use(express.json({ limit: "30mb", extended: true }));
 app.use(express.urlencoded({ limit: "30mb", extended: true }));
@@ -49,16 +74,14 @@ app.use("/like", likeRoutes);
 app.use("/watch", watchLaterRoutes);
 app.use("/history", historyRoutes);
 app.use("/comment", commentroutes);
-
+app.use("/download", downloadRoutes);
+app.use("/subscription", subscriptionRoutes);
+app.use("/meeting", meetingRoutes);
 app.get("/", (req, res) => {
   res.send("Youtube backend is working");
 });
 
-const PORT = process.env.PORT || 8000;
-
-app.listen(PORT, () => {
-  console.log(`server is running on port ${PORT}`);
-});
+const PORT = Number(process.env.PORT) || 8001;
 
 const DB = process.env.DB_URL;
 
@@ -74,3 +97,5 @@ if (!DB) {
       console.error("MongoDB connection failed:", error.message);
     });
 }
+
+server.listen(PORT, () => console.log("server is conected"));

@@ -2,11 +2,10 @@ import Video from "../models/Video.js";
 import Like from "../models/Like.js";
 
 export const handleLike = async (req, res) => {
-  const { userId } = req.body;
   const { videoId } = req.params;
   try {
     const existingLike = await Like.findOne({
-      viewer: userId,
+      viewer: req.appUser._id,
       videoid: videoId,
     });
     if (existingLike) {
@@ -15,7 +14,7 @@ export const handleLike = async (req, res) => {
       return res.status(200).json({ liked: false });
     } else {
       await Like.create({
-        viewer: userId,
+        viewer: req.appUser._id,
         videoid: videoId,
       });
       await Video.findByIdAndUpdate(videoId, { $inc: { Like: 1 } });
@@ -29,6 +28,9 @@ export const handleLike = async (req, res) => {
 
 export const getallLikedVideo = async (req, res) => {
   const { userId } = req.params;
+  if (String(req.appUser._id) !== userId) {
+    return res.status(403).json({ message: "You can only view your own likes." });
+  }
   try {
     const likevideo = await Like.find({ viewer: userId })
       .populate({

@@ -11,6 +11,24 @@ const videoSchema = new mongoose.Schema(
     Like: { type: "Number", default: 0 },
     views: { type: "Number", default: 0 },
     uploader: { type: "string" },
+    minimumSubscriptionPlan: {
+      type: String,
+      enum: ["Free", "Bronze", "Silver", "Gold"],
+      default: "Free",
+    },
+    captionTracks: [
+      {
+        src: { type: String, required: true },
+        label: String,
+        srclang: String,
+        kind: {
+          type: String,
+          enum: ["captions", "subtitles"],
+          default: "subtitles",
+        },
+        default: { type: Boolean, default: false },
+      },
+    ],
   },
   { timestamps: true },
 );

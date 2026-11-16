@@ -1,18 +1,17 @@
 import watchlater from "../models/WatchLater.js";
 
 export const handlewatchlater = async (req, res) => {
-  const { userId } = req.body;
   const { videoId } = req.params;
   try {
     const exisitingwatchlater = await watchlater.findOne({
-      viewer: userId,
+      viewer: req.appUser._id,
       videoid: videoId,
     });
     if (exisitingwatchlater) {
       await watchlater.findByIdAndDelete(exisitingwatchlater._id);
       return res.status(200).json({ watchlater: false });
     } else {
-      await watchlater.create({ viewer: userId, videoid: videoId });
+      await watchlater.create({ viewer: req.appUser._id, videoid: videoId });
       return res.status(200).json({ watchlater: true });
     }
   } catch (error) {
@@ -22,6 +21,9 @@ export const handlewatchlater = async (req, res) => {
 };
 export const getallwatchlater = async (req, res) => {
   const { userId } = req.params;
+  if (String(req.appUser._id) !== userId) {
+    return res.status(403).json({ message: "You can only view your own watch list." });
+  }
   try {
     const watchlatervideo = await watchlater
       .find({ viewer: userId })
