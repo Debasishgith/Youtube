@@ -26,6 +26,24 @@ import {
 } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
+import VideoTile from "./VideoTile";
+import {
+  ALLOWED_FILE_TYPES,
+  EMOJIS,
+  formatDuration,
+  getApiError,
+  MAX_FILE_BYTES,
+  SIGNAL_URL,
+} from "./MeetingRoomHelpers";
+import type {
+  MeetingCredentials,
+  MeetingMessage,
+  MeetingSettings,
+  Participant,
+  PeerConnectionEntry,
+  RecordingSession,
+  RemoteStream,
+} from "./MeetingRoomTypes";
 import {
   useCallback,
   useEffect,
@@ -35,195 +53,6 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from "react";
-
-const SIGNAL_URL =
-  process.env.NEXT_PUBLIC_SIGNAL_URL ?? "http://localhost:8001";
-const MAX_FILE_BYTES = 2 * 1024 * 1024;
-const ALLOWED_FILE_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "text/plain",
-]);
-const EMOJIS = ["👍", "😂", "❤️", "👏", "🎉", "🙏"];
-
-interface MeetingCredentials {
-  roomId: string;
-  title: string;
-  displayName: string;
-  role: "host" | "cohost" | "participant";
-  participantId: string;
-  participantToken: string;
-  iceServers: RTCIceServer[];
-  maxParticipants: number;
-  allowChat: boolean;
-  allowParticipantScreenShare: boolean;
-  locked: boolean;
-}
-
-interface Participant {
-  participantId: string;
-  name: string;
-  role: "host" | "cohost" | "participant";
-  micOn: boolean;
-  camOn: boolean;
-  screenOn?: boolean;
-  handRaised: boolean;
-  mutedByHost?: boolean;
-  speaking?: boolean;
-}
-
-interface MeetingMessage {
-  id: string;
-  participantId: string;
-  name: string;
-  text?: string;
-  fileName?: string;
-  fileType?: string;
-  data?: string;
-  at: number;
-}
-
-interface RemoteStream {
-  id: string;
-  userId: string;
-  name: string;
-  stream: MediaStream;
-  screen: boolean;
-}
-
-interface MeetingSettings {
-  allowChat: boolean;
-  allowParticipantScreenShare: boolean;
-  locked: boolean;
-  recording?: boolean;
-  maxParticipants: number;
-}
-
-interface RecordingSession {
-  recorder: MediaRecorder;
-  audioContext: AudioContext;
-  destination: MediaStreamAudioDestinationNode;
-  streams: Set<MediaStream>;
-  captureStream: MediaStream;
-}
-
-interface PeerConnectionEntry {
-  connection: RTCPeerConnection;
-  polite: boolean;
-  makingOffer: boolean;
-  ignoreOffer: boolean;
-  isSettingRemoteAnswerPending: boolean;
-  pendingCandidates: RTCIceCandidateInit[];
-  remoteStream: MediaStream;
-}
-
-const getApiError = (error: unknown) =>
-  typeof error === "object" &&
-  error !== null &&
-  "response" in error &&
-  typeof error.response === "object" &&
-  error.response !== null &&
-  "data" in error.response &&
-  typeof error.response.data === "object" &&
-  error.response.data !== null &&
-  "message" in error.response.data &&
-  typeof error.response.data.message === "string"
-    ? error.response.data.message
-    : error instanceof Error
-      ? error.message
-      : "The meeting request could not be completed.";
-
-const formatDuration = (totalSeconds: number) => {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds]
-    .map((value) => String(value).padStart(2, "0"))
-    .join(":");
-};
-
-function VideoTile({
-  id,
-  name,
-  stream,
-  muted = false,
-  cameraOn = true,
-  micOn = true,
-  handRaised = false,
-  speaking = false,
-  screen = false,
-  registerVideo,
-}: {
-  id: string;
-  name: string;
-  stream: MediaStream | null;
-  muted?: boolean;
-  cameraOn?: boolean;
-  micOn?: boolean;
-  handRaised?: boolean;
-  speaking?: boolean;
-  screen?: boolean;
-  registerVideo: (id: string, video: HTMLVideoElement | null) => void;
-}) {
-  const ref = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const video = ref.current;
-    if (!video) return;
-    video.srcObject = stream;
-    if (stream) void video.play().catch(() => undefined);
-    return () => {
-      video.srcObject = null;
-    };
-  }, [stream]);
-
-  useEffect(() => {
-    registerVideo(id, ref.current);
-    return () => registerVideo(id, null);
-  }, [id, registerVideo]);
-
-  return (
-    <div
-      className={`relative aspect-video min-w-0 overflow-hidden rounded-xl border bg-slate-900 ${
-        speaking
-          ? "border-emerald-400 ring-2 ring-emerald-400/40"
-          : "border-slate-700"
-      }`}
-    >
-      <video
-        ref={ref}
-        autoPlay
-        playsInline
-        muted={muted}
-        className={`h-full w-full object-cover ${
-          cameraOn || screen ? "" : "invisible"
-        }`}
-      />
-      {!cameraOn && !screen && (
-        <div className="absolute inset-0 grid place-items-center bg-slate-800">
-          <span className="grid h-20 w-20 place-items-center rounded-full bg-slate-600 text-3xl font-semibold">
-            {name.slice(0, 1).toUpperCase()}
-          </span>
-        </div>
-      )}
-      <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-linear-to-t from-black/80 to-transparent px-3 pb-2 pt-8 text-sm">
-        <span className="max-w-[65%] truncate font-medium">{name}</span>
-        {screen && (
-          <span className="text-xs text-slate-300">Sharing screen</span>
-        )}
-        {!micOn && (
-          <MicOff className="h-4 w-4 text-red-300" aria-label="Muted" />
-        )}
-        {handRaised && (
-          <Hand className="h-4 w-4 text-yellow-300" aria-label="Hand raised" />
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function MeetingRoom() {
   const { id } = useParams<{ id: string }>();
