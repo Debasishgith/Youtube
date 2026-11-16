@@ -1,88 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import axios from "axios";
 import axiosInstance from "@/lib/axiosInstance";
 import { useUser } from "@/lib/authContext";
-import { Button } from "@/components/ui/button";
-
-type SecurityMetadata = {
-  ipAddress?: string | null;
-  browser?: string;
-  browserVersion?: string | null;
-  os?: string;
-  osVersion?: string | null;
-  deviceType?: string;
-  deviceModel?: string | null;
-  city?: string | null;
-  state?: string | null;
-  country?: string | null;
-};
-
-type LoginEvent = {
-  _id: string;
-  eventType: string;
-  outcome: string;
-  createdAt: string;
-  metadata?: SecurityMetadata;
-};
-
-type LoginSession = {
-  _id: string;
-  createdAt: string;
-  lastUsedAt: string;
-  expiresAt: string;
-  metadata?: SecurityMetadata;
-};
-
-type TrustedDevice = {
-  _id: string;
-  createdAt: string;
-  lastUsedAt: string;
-  expiresAt: string;
-  metadata?: SecurityMetadata;
-};
-
-type SecurityOverview = {
-  events: LoginEvent[];
-  sessions: LoginSession[];
-  devices: TrustedDevice[];
-  currentSessionId: string;
-};
-
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date(value));
-
-const describeDevice = (metadata?: SecurityMetadata) => {
-  if (!metadata) return "Device information unavailable";
-  const browser = [metadata.browser, metadata.browserVersion]
-    .filter(Boolean)
-    .join(" ");
-  const os = [metadata.os, metadata.osVersion].filter(Boolean).join(" ");
-  return [
-    browser || "Unknown browser",
-    os || "Unknown operating system",
-    [metadata.deviceType, metadata.deviceModel].filter(Boolean).join(" · "),
-  ]
-    .filter(Boolean)
-    .join(" · ");
-};
-
-const describeLocation = (metadata?: SecurityMetadata) =>
-  [metadata?.city, metadata?.state, metadata?.country]
-    .filter(Boolean)
-    .join(", ") || "Location unavailable";
-
-const getRequestErrorMessage = (error: unknown, fallback: string) => {
-  if (axios.isAxiosError<{ message?: string }>(error)) {
-    return error.response?.data?.message || fallback;
-  }
-  return error instanceof Error ? error.message : fallback;
-};
+import SecurityRecordCard from "@/components/security/SecurityRecordCard";
+import {
+  describeDevice,
+  describeLocation,
+  formatSecurityDate,
+  getSecurityErrorMessage,
+} from "@/lib/securityHelpers";
+import type { SecurityOverview } from "@/lib/securityTypes";
 
 const AccountSecurityPage = () => {
   const { user, logOut } = useUser();
@@ -98,7 +26,12 @@ const AccountSecurityPage = () => {
       const response = await axiosInstance.get<SecurityOverview>("/user/security");
       setOverview(response.data);
     } catch (requestError: unknown) {
-      setError(getRequestErrorMessage(requestError, "Account security activity could not be loaded."));
+      setError(
+        getSecurityErrorMessage(
+          requestError,
+          "Account security activity could not be loaded.",
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -106,31 +39,10 @@ const AccountSecurityPage = () => {
 
   useEffect(() => {
     if (!user) return;
-    let active = true;
-    axiosInstance
-      .get<SecurityOverview>("/user/security")
-      .then((response) => {
-        if (active) setOverview(response.data);
-      })
-      .catch((requestError: unknown) => {
-        if (active) {
-          setError(
-            getRequestErrorMessage(
-              requestError,
-              "Account security activity could not be loaded.",
-            ),
-          );
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [user]);
+    void loadOverview();
+  }, [user, loadOverview]);
 
-  const revoke = async (path: string, id: string) => {
+  const revoke = async (path: "sessions" | "devices", id: string) => {
     setActionId(id);
     setError("");
     try {
@@ -144,7 +56,7 @@ const AccountSecurityPage = () => {
       await loadOverview();
     } catch (requestError: unknown) {
       setError(
-        getRequestErrorMessage(
+        getSecurityErrorMessage(
           requestError,
           "The selected session or device could not be revoked.",
         ),
@@ -187,34 +99,14 @@ const AccountSecurityPage = () => {
               <p className="text-sm text-muted-foreground">No active sessions found.</p>
             )}
             {overview.sessions.map((session) => (
-              <article key={session._id} className="rounded-lg border p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="font-medium">
-                      {describeDevice(session.metadata)}
-                      {session._id === overview.currentSessionId && (
-                        <span className="ml-2 text-xs text-muted-foreground">(this session)</span>
-                      )}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {session.metadata?.ipAddress || "IP unavailable"} ·{" "}
-                      {describeLocation(session.metadata)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Last active {formatDate(session.lastUsedAt)} · Expires{" "}
-                      {formatDate(session.expiresAt)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={actionId === session._id}
-                    onClick={() => void revoke("sessions", session._id)}
-                  >
-                    {actionId === session._id ? "Revoking..." : "Revoke"}
-                  </Button>
-                </div>
-              </article>
+              <SecurityRecordCard
+                key={session._id}
+                record={session}
+                activityLabel="active"
+                isCurrentSession={session._id === overview.currentSessionId}
+                isRevoking={actionId === session._id}
+                onRevoke={() => void revoke("sessions", session._id)}
+              />
             ))}
           </section>
 
@@ -224,29 +116,13 @@ const AccountSecurityPage = () => {
               <p className="text-sm text-muted-foreground">No trusted devices found.</p>
             )}
             {overview.devices.map((device) => (
-              <article key={device._id} className="rounded-lg border p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <p className="font-medium">{describeDevice(device.metadata)}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {device.metadata?.ipAddress || "IP unavailable"} ·{" "}
-                      {describeLocation(device.metadata)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Last used {formatDate(device.lastUsedAt)} · Trusted until{" "}
-                      {formatDate(device.expiresAt)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={actionId === device._id}
-                    onClick={() => void revoke("devices", device._id)}
-                  >
-                    {actionId === device._id ? "Revoking..." : "Revoke"}
-                  </Button>
-                </div>
-              </article>
+              <SecurityRecordCard
+                key={device._id}
+                record={device}
+                activityLabel="used"
+                isRevoking={actionId === device._id}
+                onRevoke={() => void revoke("devices", device._id)}
+              />
             ))}
           </section>
 
@@ -272,7 +148,7 @@ const AccountSecurityPage = () => {
                     </p>
                   </div>
                   <time className="text-xs text-muted-foreground">
-                    {formatDate(event.createdAt)}
+                    {formatSecurityDate(event.createdAt)}
                   </time>
                 </div>
               </article>
