@@ -23,10 +23,7 @@ dotenv.config({
 
 const app = express();
 
-const allowedOrigins = [
-  "https://youtube-chi-five-44.vercel.app",
-  "http://localhost:3000",
-];
+const allowedOrigins = "https://youtube-chi-five-44.vercel.app";
 
 const server = createServer(app);
 const io = new Server(server, {
