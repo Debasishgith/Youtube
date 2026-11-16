@@ -1035,7 +1035,7 @@ const VideoPlayer = ({
       </div>
 
       <div
-        className={`absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/95 via-black/55 to-transparent px-3 pb-3 pt-12 transition-opacity duration-200 sm:px-4 ${
+        className={`absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-black/95 via-black/55 to-transparent px-3 pb-3 pt-12 transition-opacity duration-200 sm:px-4 ${
           controlsVisible || !isPlaying
             ? "opacity-100"
             : "pointer-events-none opacity-0"
