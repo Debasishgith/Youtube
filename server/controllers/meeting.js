@@ -1,24 +1,12 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import Meeting from "../models/Meeting.js";
 import { hashToken } from "../services/loginSecurity.js";
 import { buildIceServers } from "../services/iceServers.js";
+import { isValidRoomId, tokenMatches } from "../services/meetingAccess.js";
 
 const MEETING_TTL_MS = 24 * 60 * 60 * 1000;
 const ACTIVE_PARTICIPANT_MS = 90 * 1000;
 const MAX_PARTICIPANTS = 6;
-
-const isValidRoomId = (roomId) =>
-  typeof roomId === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(roomId);
-
-const tokenMatches = (token, tokenHash) => {
-  if (typeof token !== "string" || !token || !tokenHash) return false;
-  const candidate = Buffer.from(hashToken(token));
-  const expected = Buffer.from(tokenHash);
-  return (
-    candidate.length === expected.length &&
-    timingSafeEqual(candidate, expected)
-  );
-};
 
 const makeCredentials = (meeting, participant, participantToken) => ({
   roomId: meeting.roomId,

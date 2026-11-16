@@ -1,6 +1,5 @@
-import { timingSafeEqual } from "crypto";
 import Meeting from "../models/Meeting.js";
-import { hashToken } from "./loginSecurity.js";
+import { tokenMatches } from "./meetingAccess.js";
 import {
   isValidWebRTCCandidate,
   isValidWebRTCDescription,
@@ -16,16 +15,6 @@ const ALLOWED_FILE_TYPES = new Set([
   "application/pdf",
   "text/plain",
 ]);
-
-const tokenMatches = (token, tokenHash) => {
-  if (typeof token !== "string" || !token || !tokenHash) return false;
-  const candidate = Buffer.from(hashToken(token));
-  const expected = Buffer.from(tokenHash);
-  return (
-    candidate.length === expected.length &&
-    timingSafeEqual(candidate, expected)
-  );
-};
 
 const getParticipants = (room) =>
   [...room.participants.values()].map(
