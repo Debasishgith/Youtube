@@ -129,6 +129,9 @@ const sendOtpEmail = async (email, name, code, expiresAt) => {
     port: Number(process.env.SMTP_PORT) || 587,
     secure: process.env.SMTP_SECURE === "true",
     auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
   const safeName = String(name || "there").replace(/[&<>"']/g, "");
   const expiresInMinutes = Math.max(
