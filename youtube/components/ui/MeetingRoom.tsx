@@ -1,35 +1,15 @@
 "use client";
 
 import axiosInstance from "@/lib/axiosInstance";
-import {
-  ArrowLeft,
-  Camera,
-  CameraOff,
-  Check,
-  Circle,
-  Copy,
-  Hand,
-  Lock,
-  MessageCircle,
-  Mic,
-  MicOff,
-  MonitorUp,
-  PhoneOff,
-  RotateCcw,
-  Shield,
-  StopCircle,
-  Unlock,
-  UserMinus,
-  UserPlus,
-  Users,
-  X,
-} from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { io, type Socket } from "socket.io-client";
-import VideoTile from "./VideoTile";
+import MeetingRoomControls from "./MeetingRoomControls";
+import MeetingRoomJoinScreen from "./MeetingRoomJoinScreen";
+import MeetingRoomSidePanel from "./MeetingRoomSidePanel";
+import MeetingVideoGrid from "./MeetingVideoGrid";
 import {
   ALLOWED_FILE_TYPES,
-  EMOJIS,
   formatDuration,
   getApiError,
   MAX_FILE_BYTES,
@@ -38,6 +18,7 @@ import {
 import type {
   MeetingCredentials,
   MeetingMessage,
+  MeetingModerationAction,
   MeetingSettings,
   Participant,
   PeerConnectionEntry,
@@ -1145,62 +1126,24 @@ export default function MeetingRoom() {
     void connectToMeeting(displayName);
   };
 
+  const moderateMeeting = (action: MeetingModerationAction) => {
+    socketRef.current?.emit("meeting:moderate", action);
+  };
+
   const actionButton =
     "inline-flex items-center gap-2 rounded-full bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40";
 
   if (!credentials) {
     return (
-      <main className="fixed inset-0 z-50 grid place-items-center bg-slate-950 p-4 text-white">
-        <form
-          onSubmit={handleJoinForm}
-          className="w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-900 p-6"
-        >
-          <button
-            type="button"
-            onClick={() => router.push("/video-call")}
-            className="inline-flex items-center gap-2 text-sm text-slate-300"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </button>
-          <div>
-            <h1 className="text-2xl font-semibold">Join meeting</h1>
-            <p className="mt-1 text-sm text-slate-400">
-              {joining
-                ? "Checking the invite and connecting…"
-                : "Choose the name participants will see."}
-            </p>
-          </div>
-          <label className="block space-y-1 text-sm">
-            <span>Display name</span>
-            <input
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              maxLength={40}
-              required
-              autoComplete="name"
-              className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-white"
-            />
-          </label>
-          {error && (
-            <p role="alert" className="text-sm text-red-300">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={joining || !inviteToken}
-            className="w-full rounded-md bg-red-600 px-4 py-2 font-medium disabled:opacity-50"
-          >
-            {joining ? "Joining…" : "Join"}
-          </button>
-          {!inviteToken && (
-            <p className="text-sm text-amber-300">
-              This link is missing its invite credential.
-            </p>
-          )}
-        </form>
-      </main>
+      <MeetingRoomJoinScreen
+        displayName={displayName}
+        inviteToken={inviteToken}
+        joining={joining}
+        error={error}
+        onNameChange={setDisplayName}
+        onSubmit={handleJoinForm}
+        onBack={() => router.push("/video-call")}
+      />
     );
   }
 
@@ -1274,407 +1217,62 @@ export default function MeetingRoom() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <section className="min-w-0 flex-1 overflow-y-auto p-3 sm:p-5">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <VideoTile
-              id={credentials.participantId}
-              name={`${credentials.displayName} (You)`}
-              stream={localStream}
-              muted
-              cameraOn={cameraOn}
-              micOn={micOn}
-              handRaised={handRaised}
-              speaking={self?.speaking}
-              registerVideo={registerVideo}
-            />
-            {localScreenStream && (
-              <VideoTile
-                id={`${credentials.participantId}_screen`}
-                name={`${credentials.displayName} (You)`}
-                stream={localScreenStream}
-                muted
-                screen
-                registerVideo={registerVideo}
-              />
-            )}
-            {remoteStreams.map((remote) => {
-              const participant = participants.find(
-                (item) => item.participantId === remote.userId,
-              );
-              return (
-                <VideoTile
-                  key={remote.id}
-                  id={remote.id}
-                  name={remote.name}
-                  stream={remote.stream}
-                  screen={participant?.screenOn ?? remote.screen}
-                  cameraOn={
-                    participant?.camOn !== false ||
-                    participant?.screenOn === true
-                  }
-                  micOn={participant?.micOn !== false}
-                  handRaised={participant?.handRaised}
-                  speaking={participant?.speaking}
-                  registerVideo={registerVideo}
-                />
-              );
-            })}
-          </div>
-          <p className="mt-3 text-center text-xs text-slate-400">
-            Connection status: {connectionState}. Calls reconnect automatically
-            when the network returns.
-          </p>
-        </section>
+        <MeetingVideoGrid
+          credentials={credentials}
+          localStream={localStream}
+          localScreenStream={localScreenStream}
+          participants={participants}
+          remoteStreams={remoteStreams}
+          cameraOn={cameraOn}
+          micOn={micOn}
+          handRaised={handRaised}
+          selfSpeaking={self?.speaking}
+          connectionState={connectionState}
+          registerVideo={registerVideo}
+        />
 
-        {panel && (
-          <aside className="flex w-full max-w-sm shrink-0 flex-col border-l border-slate-800 bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-              <h2 className="font-semibold">
-                {panel === "people"
-                  ? `People (${orderedParticipants.length})`
-                  : "In-call chat"}
-              </h2>
-              <button
-                type="button"
-                onClick={() => updatePanel(null)}
-                aria-label="Close panel"
-                className="rounded p-1 hover:bg-slate-800"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {panel === "people" ? (
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-800">
-                {orderedParticipants.map((participant) => (
-                  <div
-                    key={participant.participantId}
-                    className="flex items-center gap-2 px-4 py-3 text-sm"
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {participant.name}
-                      {participant.participantId ===
-                        credentials.participantId && " (You)"}
-                      <span className="ml-2 text-xs text-slate-400">
-                        {participant.role}
-                      </span>
-                    </span>
-                    {participant.handRaised && (
-                      <Hand className="h-4 w-4 text-yellow-300" />
-                    )}
-                    {participant.micOn ? (
-                      <Mic className="h-4 w-4 text-slate-300" />
-                    ) : (
-                      <MicOff className="h-4 w-4 text-red-300" />
-                    )}
-                    {participant.camOn ? (
-                      <Camera className="h-4 w-4 text-slate-300" />
-                    ) : (
-                      <CameraOff className="h-4 w-4 text-red-300" />
-                    )}
-                    {moderator &&
-                      participant.participantId !== credentials.participantId &&
-                      participant.role !== "host" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              socketRef.current?.emit("meeting:moderate", {
-                                type: participant.mutedByHost
-                                  ? "unmute"
-                                  : "mute",
-                                participantId: participant.participantId,
-                              })
-                            }
-                            title={
-                              participant.mutedByHost
-                                ? "Allow participant to unmute"
-                                : "Mute participant"
-                            }
-                            className="rounded p-1 hover:bg-slate-800"
-                          >
-                            {participant.mutedByHost ? (
-                              <Mic className="h-4 w-4" />
-                            ) : (
-                              <MicOff className="h-4 w-4" />
-                            )}
-                          </button>
-                          {isHost && participant.role !== "cohost" && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                socketRef.current?.emit("meeting:moderate", {
-                                  type: "assign-cohost",
-                                  participantId: participant.participantId,
-                                })
-                              }
-                              title="Assign co-host"
-                              className="rounded p-1 hover:bg-slate-800"
-                            >
-                              <UserPlus className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              socketRef.current?.emit("meeting:moderate", {
-                                type: "remove",
-                                participantId: participant.participantId,
-                              })
-                            }
-                            title="Remove participant"
-                            className="rounded p-1 text-red-300 hover:bg-slate-800"
-                          >
-                            <UserMinus className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <>
-                <div className="flex-1 space-y-3 overflow-y-auto p-3">
-                  {messages.length === 0 && (
-                    <p className="text-sm text-slate-400">No messages yet.</p>
-                  )}
-                  {messages.map((message) => (
-                    <div key={message.id} className="break-words">
-                      <p className="text-xs text-slate-400">
-                        {message.name} ·{" "}
-                        {new Date(message.at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                      {message.text && (
-                        <p className="text-sm">{message.text}</p>
-                      )}
-                      {message.data && message.fileType && (
-                        <a
-                          href={`data:${message.fileType};base64,${message.data}`}
-                          download={message.fileName}
-                          className="text-sm text-sky-300 underline"
-                        >
-                          Download {message.fileName}
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-slate-800 p-3">
-                  {settings?.allowChat ? (
-                    <>
-                      <div className="mb-2 flex gap-1">
-                        {EMOJIS.map((emoji) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() =>
-                              setDraft((current) => current + emoji)
-                            }
-                            className="rounded px-1 hover:bg-slate-800"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          value={draft}
-                          onChange={(event) => setDraft(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") sendMessage();
-                          }}
-                          maxLength={500}
-                          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
-                          placeholder="Send a message"
-                        />
-                        <button
-                          type="button"
-                          onClick={sendMessage}
-                          className="rounded-md bg-blue-600 px-3 text-sm"
-                        >
-                          Send
-                        </button>
-                        <label className="grid cursor-pointer place-items-center rounded-md border border-slate-700 px-3">
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain"
-                            className="sr-only"
-                            onChange={(event) => void handleFile(event)}
-                          />
-                          <span className="text-sm" aria-label="Attach file">
-                            📎
-                          </span>
-                        </label>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-slate-400">
-                      The host disabled chat.
-                    </p>
-                  )}
-                </div>
-              </>
-            )}
-          </aside>
-        )}
+        <MeetingRoomSidePanel
+          panel={panel}
+          participants={orderedParticipants}
+          currentParticipantId={credentials.participantId}
+          isModerator={moderator}
+          isHost={isHost}
+          messages={messages}
+          chatEnabled={Boolean(settings?.allowChat)}
+          draft={draft}
+          onClose={() => updatePanel(null)}
+          onModerate={moderateMeeting}
+          onDraftChange={setDraft}
+          onSendMessage={sendMessage}
+          onFileSelect={(event) => void handleFile(event)}
+          onAddEmoji={(emoji) => setDraft((current) => current + emoji)}
+        />
       </div>
 
-      <footer className="flex flex-wrap items-center justify-center gap-2 border-t border-slate-800 bg-slate-950 px-3 py-3">
-        <button
-          type="button"
-          onClick={toggleMic}
-          className={actionButton}
-          disabled={!localStream || Boolean(self?.mutedByHost)}
-        >
-          {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-          {micOn ? "Mute" : "Unmute"}
-        </button>
-        <button
-          type="button"
-          onClick={toggleCamera}
-          className={actionButton}
-          disabled={!localStream}
-        >
-          {cameraOn ? (
-            <Camera className="h-4 w-4" />
-          ) : (
-            <CameraOff className="h-4 w-4" />
-          )}
-          {cameraOn ? "Camera off" : "Camera on"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void switchCamera()}
-          className={actionButton}
-          disabled={!localStream}
-          title="Switch camera"
-        >
-          <RotateCcw className="h-4 w-4" />
-          <span className="hidden sm:inline">Switch camera</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => void toggleScreenShare()}
-          className={actionButton}
-          disabled={!canShareScreen}
-        >
-          <MonitorUp className="h-4 w-4" />
-          {screenSharing ? "Stop sharing" : "Share screen"}
-        </button>
-        <button type="button" onClick={toggleHand} className={actionButton}>
-          <Hand className="h-4 w-4" />
-          {handRaised ? "Lower hand" : "Raise hand"}
-        </button>
-        <button
-          type="button"
-          onClick={() => togglePanel("people")}
-          className={actionButton}
-        >
-          <Users className="h-4 w-4" />
-          People
-        </button>
-        <button
-          type="button"
-          onClick={() => togglePanel("chat")}
-          className={`${actionButton} relative`}
-          aria-label={
-            unreadMessageCount > 0
-              ? `Chat, ${unreadMessageCount} unread messages`
-              : "Chat"
-          }
-        >
-          <MessageCircle className="h-4 w-4" />
-          Chat
-          {unreadMessageCount > 0 && (
-            <span
-              aria-hidden="true"
-              className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white"
-            >
-              {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
-            </span>
-          )}
-        </button>
-        {moderator && (
-          <>
-            <button
-              type="button"
-              onClick={() =>
-                socketRef.current?.emit("meeting:moderate", {
-                  type: settings?.locked ? "unlock" : "lock",
-                })
-              }
-              className={actionButton}
-            >
-              {settings?.locked ? (
-                <Unlock className="h-4 w-4" />
-              ) : (
-                <Lock className="h-4 w-4" />
-              )}
-              {settings?.locked ? "Unlock" : "Lock"}
-            </button>
-            {isHost && (
-              <>
-                <button
-                  type="button"
-                  onClick={() =>
-                    socketRef.current?.emit("meeting:moderate", {
-                      type: "permissions",
-                      allowChat: !settings?.allowChat,
-                    })
-                  }
-                  className={actionButton}
-                  title="Toggle chat permission"
-                >
-                  <Shield className="h-4 w-4" />
-                  {settings?.allowChat ? "Disable chat" : "Enable chat"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    socketRef.current?.emit("meeting:moderate", {
-                      type: "permissions",
-                      allowParticipantScreenShare:
-                        !settings?.allowParticipantScreenShare,
-                    })
-                  }
-                  className={actionButton}
-                  title="Toggle participant screen-sharing permission"
-                >
-                  <MonitorUp className="h-4 w-4" />
-                  {settings?.allowParticipantScreenShare
-                    ? "Disable participant sharing"
-                    : "Allow participant sharing"}
-                </button>
-              </>
-            )}
-          </>
-        )}
-        {isHost && (
-          <button
-            type="button"
-            onClick={recording ? stopRecording : () => void startRecording()}
-            className={`${actionButton} ${recording ? "bg-red-700 hover:bg-red-600" : ""}`}
-          >
-            {recording ? (
-              <StopCircle className="h-4 w-4" />
-            ) : (
-              <Circle className="h-4 w-4" />
-            )}
-            {recording ? "Stop recording" : "Record locally"}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={leaveMeeting}
-          className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-medium hover:bg-red-500"
-        >
-          <PhoneOff className="h-4 w-4" />
-          {isHost ? "End for everyone" : "Leave"}
-        </button>
-      </footer>
+      <MeetingRoomControls
+        isHost={isHost}
+        isModerator={moderator}
+        settings={settings}
+        localStreamReady={Boolean(localStream)}
+        micOn={micOn}
+        cameraOn={cameraOn}
+        mutedByHost={Boolean(self?.mutedByHost)}
+        canShareScreen={canShareScreen}
+        screenSharing={screenSharing}
+        handRaised={handRaised}
+        unreadMessageCount={unreadMessageCount}
+        recording={recording}
+        onToggleMic={toggleMic}
+        onToggleCamera={toggleCamera}
+        onSwitchCamera={() => void switchCamera()}
+        onToggleScreenShare={() => void toggleScreenShare()}
+        onToggleHand={toggleHand}
+        onTogglePanel={togglePanel}
+        onModerate={moderateMeeting}
+        onStartRecording={() => void startRecording()}
+        onStopRecording={stopRecording}
+        onLeave={leaveMeeting}
+      />
     </main>
   );
 }

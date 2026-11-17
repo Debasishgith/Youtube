@@ -68,3 +68,15 @@ export interface PeerConnectionEntry {
   pendingCandidates: RTCIceCandidateInit[];
   remoteStream: MediaStream;
 }
+
+export type MeetingModerationAction =
+  | {
+      type: "mute" | "unmute" | "assign-cohost" | "remove";
+      participantId: string;
+    }
+  | { type: "lock" | "unlock" | "end" }
+  | {
+      type: "permissions";
+      allowChat?: boolean;
+      allowParticipantScreenShare?: boolean;
+    };
