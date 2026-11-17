@@ -39,7 +39,10 @@ const AccountSecurityPage = () => {
 
   useEffect(() => {
     if (!user) return;
-    void loadOverview();
+    const timer = window.setTimeout(() => {
+      void loadOverview();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [user, loadOverview]);
 
   const revoke = async (path: "sessions" | "devices", id: string) => {
