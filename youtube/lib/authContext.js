@@ -1,6 +1,11 @@
 "use client";
 
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import {
+  getRedirectResult,
+  onAuthStateChanged,
+  signInWithRedirect,
+  signOut,
+} from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { auth, provider } from "./firebase";
 import axiosInstance from "./axiosInstance";
@@ -86,9 +91,11 @@ export const UserProvider = ({ children }) => {
       return;
     }
     setAuthError("");
+    setAuthPending(true);
     try {
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (error) {
+      setAuthPending(false);
       setAuthError(getErrorMessage(error, "Google sign-in could not be completed."));
     }
   }, [startLogin]);
@@ -169,6 +176,9 @@ export const UserProvider = ({ children }) => {
   }, [user]);
 
   useEffect(() => {
+    void getRedirectResult(auth).catch((error) => {
+      setAuthError(getErrorMessage(error, "Google sign-in could not be completed."));
+    });
     const handleAuthRequired = () => {
       if (auth.currentUser) void startLogin(auth.currentUser);
     };
